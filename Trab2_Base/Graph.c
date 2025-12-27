@@ -381,6 +381,34 @@ IndicesSet* GraphGetSetAdjacentsTo(const Graph* g, unsigned int v) {
   // TO BE COMPLETED
   //
 
+  // 1. Encontrar o vértice 'v' na lista principal de vértices do grafo
+  // Criamos um vértice temporário apenas com o ID para servir de chave de busca
+  struct _Vertex search_dummy;
+  search_dummy.id = v;
+  
+  // Posiciona o iterador da lista no vértice correto
+  ListSearch(g->verticesList, (void*)(&search_dummy));
+  
+  // Obtém o ponteiro real para o vértice encontrado
+  struct _Vertex* vertex_ptr = (struct _Vertex*)ListGetCurrentItem(g->verticesList);
+
+  // 2. Aceder à lista de arestas (adjacências) desse vértice
+  List* edges = vertex_ptr->edgesList;
+
+  // Se a lista de arestas não estiver vazia, percorremos e adicionamos ao conjunto
+  if (ListIsEmpty(edges) == 0) {
+    ListMoveToHead(edges);
+    unsigned int i = 0;
+    
+    // Itera sobre todas as arestas
+    for (; i < ListGetSize(edges); ListMoveToNext(edges), i++) {
+      struct _Edge* e = (struct _Edge*)ListGetCurrentItem(edges);
+      
+      // Adiciona o ID do vértice vizinho (adjVertex) ao conjunto de retorno
+      IndicesSetAdd(adjacents_set, e->adjVertex);
+    }
+  }
+
   return adjacents_set;
 }
 
