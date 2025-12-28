@@ -265,6 +265,67 @@ Graph* GraphGetSubgraph(const Graph* g, IndicesSet* vertSet) {
   //
   // TO BE COMPLETED
   //
+  
+
+  // ADICIONAR VÉRTICES
+  // Percorremos a lista de vértices do grafo original
+  List* original_vertices = g->verticesList;
+  
+  if (!ListIsEmpty(original_vertices)) {
+    ListMoveToHead(original_vertices);
+    unsigned int i = 0;
+    for (; i < ListGetSize(original_vertices); ListMoveToNext(original_vertices), i++) {
+      struct _Vertex* v = (struct _Vertex*)ListGetCurrentItem(original_vertices);
+      
+      // Se o vértice v pertence ao conjunto alvo, adicionamo-lo ao novo grafo
+      if (IndicesSetContains(vertSet, v->id)) {
+        GraphAddVertex(new, v->id);
+      }
+    }
+  }
+
+  // ADICIONAR ARESTAS
+  // Percorremos novamente para verificar as conexões
+  if (!ListIsEmpty(original_vertices)) {
+    ListMoveToHead(original_vertices);
+    unsigned int i = 0;
+    for (; i < ListGetSize(original_vertices); ListMoveToNext(original_vertices), i++) {
+      struct _Vertex* v = (struct _Vertex*)ListGetCurrentItem(original_vertices);
+
+      // Otimização: Se a origem 'v' não está no subgrafo, as suas arestas não interessam
+      if (IndicesSetContains(vertSet, v->id) == 0) {
+        continue;
+      }
+
+      List* edges = v->edgesList;
+      if (ListIsEmpty(edges)) continue; // Sem arestas para processar
+
+      ListMoveToHead(edges);
+      unsigned int k = 0;
+      for (; k < ListGetSize(edges); ListMoveToNext(edges), k++) {
+        struct _Edge* e = (struct _Edge*)ListGetCurrentItem(edges);
+        unsigned int w = e->adjVertex;
+
+        // Só adicionamos a aresta se o destino 'w' TAMBÉM estiver no subgrafo
+        if (IndicesSetContains(vertSet, w)) {
+          
+          // Lógica de Inserção:
+          // Se for Digraph (Orientado): Adicionamos sempre.
+          // Se for Graph (Não Orientado): Adicionamos apenas se v < w para evitar 
+          // tentar adicionar a mesma aresta duas vezes (uma vez como v->w e outra como w->v),
+          // pois a função GraphAddEdge já trata da bidirecionalidade.
+          if (g->isDigraph || v->id < w) {
+            
+            if (g->isWeighted) {
+              GraphAddWeightedEdge(new, v->id, w, e->weight);
+            } else {
+              GraphAddEdge(new, v->id, w);
+            }
+          }
+        }
+      }
+    }
+  }
 
   GraphCheckInvariants(new);
 
@@ -381,7 +442,7 @@ IndicesSet* GraphGetSetAdjacentsTo(const Graph* g, unsigned int v) {
   // TO BE COMPLETED
   //
 
-  // 1. Encontrar o vértice 'v' na lista principal de vértices do grafo
+  // Encontrar o vértice 'v' na lista principal de vértices do grafo
   // Criamos um vértice temporário apenas com o ID para servir de chave de busca
   struct _Vertex search_dummy;
   search_dummy.id = v;
@@ -392,7 +453,7 @@ IndicesSet* GraphGetSetAdjacentsTo(const Graph* g, unsigned int v) {
   // Obtém o ponteiro real para o vértice encontrado
   struct _Vertex* vertex_ptr = (struct _Vertex*)ListGetCurrentItem(g->verticesList);
 
-  // 2. Aceder à lista de arestas (adjacências) desse vértice
+  // Aceder à lista de arestas desse vértice
   List* edges = vertex_ptr->edgesList;
 
   // Se a lista de arestas não estiver vazia, percorremos e adicionamos ao conjunto
@@ -429,6 +490,36 @@ double* GraphComputeVertexWeights(const Graph* g) {
   // Fill with -1 to signal no vertex
   for (unsigned int v = 0; v < g->indicesRange; v++) {
     weightsArray[v] = -1.0;
+  }
+
+  // Obter a lista de vértices
+  List* vertices = g->verticesList;
+
+  // Se a lista não estiver vazia, processamos os vértices
+  if (ListIsEmpty(vertices) == 0) {
+    ListMoveToHead(vertices);
+    unsigned int i = 0;
+
+    // Iterar sobre todos os vértices do grafo
+    for (; i < ListGetSize(vertices); ListMoveToNext(vertices), i++) {
+      struct _Vertex* v = (struct _Vertex*)ListGetCurrentItem(vertices);
+      
+      double current_vertex_weight = 0.0;
+      List* edges = v->edgesList;
+
+      // Somar os pesos das arestas adjacentes a este vértice
+      if (ListIsEmpty(edges) == 0) {
+        ListMoveToHead(edges);
+        unsigned int k = 0;
+        for (; k < ListGetSize(edges); ListMoveToNext(edges), k++) {
+          struct _Edge* e = (struct _Edge*)ListGetCurrentItem(edges);
+          current_vertex_weight += e->weight;
+        }
+      }
+
+      // Guardar o peso calculado na posição correspondente ao ID do vértice
+      weightsArray[v->id] = current_vertex_weight;
+    }
   }
 
   //
