@@ -6,10 +6,10 @@
 // GraphDominatingSets - Computing Vertex Dominating Sets for UNDIRECTED graphs
 //
 
-// Student Name :
-// Student Number :
-// Student Name :
-// Student Number :
+// Student Name : Lucas Gaspar Marques
+// Student Number : 125982
+// Student Name : Gonçalo Carapinheira Duarte
+// Student Number : 103871
 
 /*** COMPLETE THE GraphIsDominatingSet FUNCTION ***/
 /*** COMPLETE THE GraphMinDominatingSet FUNCTION ***/
@@ -43,38 +43,43 @@ int GraphIsDominatingSet(const Graph* g, IndicesSet* vertSet) {
   // TO BE COMPLETED
   //
   // Para cada vértice no grafo
-  uint16_t v = IndicesSetGetFirstElem(allVertices);
-  while (v != -1) {
-    // Se o vértice não está dominado
-    if (!IndicesSetContains(vertSet, v)) {
-      // Obter vértices adjacentes a v
-      IndicesSet* adjacents = GraphGetSetAdjacentsTo(g, v);
-      
-      // Verificar se algum vértice adjacente está no conjunto dominante
-      int isDominated = 0;
-      uint16_t adj = IndicesSetGetFirstElem(adjacents);
-      while (adj != -1) {
-        if (IndicesSetContains(vertSet, adj)) {
-          isDominated = 1;
-          break;
+  // Obter todos os vértices do grafo
+   IndicesSet* allVertices = GraphGetSetVertices(g);
+    int result = 1; // Assumimos verdadeiro
+
+    int v = IndicesSetGetFirstElem(allVertices);
+    while (v != -1) {
+        // Se v já está no conjunto, ok
+        if (IndicesSetContains(vertSet, v)) {
+            v = IndicesSetGetNextElem(allVertices);
+            continue;
         }
-        adj = IndicesSetGetNextElem(adjacents);
-      }
-      
-      IndicesSetDestroy(&adjacents);
-      
-      // Se encontrou um vértice não dominado, não é conjunto dominante
-      if (!isDominated) {
-        IndicesSetDestroy(&allVertices);
-        return 0;
-      }
+
+        // Se não, verificar vizinhos
+        int isCovered = 0;
+        IndicesSet* neighbors = GraphGetSetAdjacentsTo(g, v);
+        
+        int neighbor = IndicesSetGetFirstElem(neighbors);
+        while (neighbor != -1) {
+            if (IndicesSetContains(vertSet, neighbor)) {
+                isCovered = 1;
+                break;
+            }
+            neighbor = IndicesSetGetNextElem(neighbors);
+        }
+        
+        IndicesSetDestroy(&neighbors);
+
+        if (!isCovered) {
+            result = 0;
+            break; // Sai do ciclo, e a limpeza é feita no final
+        }
+
+        v = IndicesSetGetNextElem(allVertices);
     }
-    
-    v = IndicesSetGetNextElem(allVertices);
-  }
-  
-  IndicesSetDestroy(&allVertices);
-  return 1;
+
+    IndicesSetDestroy(&allVertices); // Limpeza única aqui
+    return result;
 }
 
 //
@@ -91,69 +96,81 @@ IndicesSet* GraphComputeMinDominatingSet(const Graph* g) {
   //
   // TO BE COMPLETED
   //
-  uint16_t range = GraphGetVertexRange(g);
-  uint16_t n = GraphGetNumVertices(g);
-  
-  // Se o grafo não tem vértices
-  if (n == 0) {
-    return IndicesSetCreateEmpty(range);
-  }
-  
-  // Obter todos os vértices do grafo
-  IndicesSet* allVertices = GraphGetSetVertices(g);
-  
-  // Converter para array para facilitar o acesso por índice
-  uint16_t vertices[n];
-  uint16_t idx = 0;
-  uint16_t v = IndicesSetGetFirstElem(allVertices);
-  while (v != -1) {
-    vertices[idx++] = v;
-    v = IndicesSetGetNextElem(allVertices);
-  }
-  
-  IndicesSet* result = NULL;
-  
-  // Busca exaustiva: testar todos os subconjuntos não vazios
-  // Tentar por tamanhos crescentes para encontrar o menor primeiro
-  for (uint16_t size = 1; size <= n && result == NULL; size++) {
-    // Usar máscara de bits para gerar todos os subconjuntos de tamanho 'size'
-    for (unsigned long mask = 0; mask < (1UL << n); mask++) {
-      // Contar bits setados
-      int bitCount = 0;
-      unsigned long temp = mask;
-      while (temp) {
-        bitCount += temp & 1;
-        temp >>= 1;
-      }
-      
-      if (bitCount == size) {
-        // Criar conjunto candidato
-        IndicesSet* candidate = IndicesSetCreateEmpty(range);
-        for (uint16_t i = 0; i < n; i++) {
-          if (mask & (1UL << i)) {
-            IndicesSetAdd(candidate, vertices[i]);
-          }
-        }
-        
-        // Verificar se é conjunto dominante
-        if (GraphIsDominatingSet(g, candidate)) {
-          result = candidate;  // Encontrou o menor conjunto dominante
-          break;
-        }
-        
-        IndicesSetDestroy(&candidate);
-      }
+  unsigned int range = GraphGetVertexRange(g);
+    
+    // Mapear vértices reais para um array contínuo (0 a N-1)
+    // Isto resolve o problema de índices não sequenciais ou buracos
+    IndicesSet* allVerticesSet = GraphGetSetVertices(g);
+    int numVertices = IndicesSetGetNumElems(allVerticesSet);
+    
+    // Se o grafo for vazio
+    if (numVertices == 0) {
+        IndicesSetDestroy(&allVerticesSet);
+        return IndicesSetCreateEmpty(range);
     }
-  }
-  
-  IndicesSetDestroy(&allVertices);
-  
-  // Fallback: se não encontrou (não deve acontecer para grafos não vazios)
-  if (result == NULL) {
-    result = GraphGetSetVertices(g);
-  }
-  
-  return result;
+
+    // Array para guardar os IDs reais dos vértices
+    unsigned int* vertexMap = malloc(numVertices * sizeof(unsigned int));
+    int idx = 0;
+    int v = IndicesSetGetFirstElem(allVerticesSet);
+    while (v != -1) {
+        vertexMap[idx++] = v;
+        v = IndicesSetGetNextElem(allVerticesSet);
+    }
+    IndicesSetDestroy(&allVerticesSet);
+
+    // Preparar variáveis para o melhor conjunto encontrado
+    IndicesSet* bestSet = NULL;
+    int minSize = numVertices + 1; // Começa com um valor impossivelmente alto
+
+    // Iterar por TODOS os subconjuntos possíveis usando uma máscara de bits
+    // 1ULL << numVertices cria o número 2^N.
+    unsigned long long maxMask = (1ULL << numVertices);
+
+    for (unsigned long long mask = 1; mask < maxMask; mask++) {
+        
+        // Otimização: Contar bits da máscara (tamanho do subconjunto atual)
+        // Se o tamanho atual já for maior ou igual ao melhor encontrado, ignoramos
+        int currentSize = 0;
+        unsigned long long tempMask = mask;
+        while(tempMask) { currentSize += tempMask & 1; tempMask >>= 1; }
+        
+        if (bestSet != NULL && currentSize >= minSize) {
+            continue;
+        }
+
+        // Construir o conjunto candidato a partir da máscara
+        IndicesSet* candidate = IndicesSetCreateEmpty(range);
+        for (int i = 0; i < numVertices; i++) {
+            // Se o bit i está a 1, adicionamos o vértice correspondente
+            if ((mask >> i) & 1) {
+                IndicesSetAdd(candidate, vertexMap[i]);
+            }
+        }
+
+        // Verificar se é dominante
+        if (GraphIsDominatingSet(g, candidate)) {
+            // Como já verificámos o tamanho lá em cima, se chegámos aqui
+            // é porque este é necessariamente melhor (menor)
+            if (bestSet != NULL) {
+                IndicesSetDestroy(&bestSet);
+            }
+            bestSet = candidate; // O candidato passa a ser o bestSet (não destruir!)
+            minSize = currentSize;
+        } else {
+            // Se não serve, libertamos a memória
+            IndicesSetDestroy(&candidate);
+        }
+    }
+
+    free(vertexMap);
+
+    // Fallback de segurança
+    if (bestSet == NULL) {
+        return GraphGetSetVertices(g);
+    }
+
+    return bestSet;
 }
 
 //
@@ -170,78 +187,99 @@ IndicesSet* GraphComputeMinWeightDominatingSet(const Graph* g) {
   //
   // TO BE COMPLETED
   //
-  uint16_t range = GraphGetVertexRange(g);
-  uint16_t n = GraphGetNumVertices(g);
-  
-  // Se o grafo não tem vértices
-  if (n == 0) {
-    return IndicesSetCreateEmpty(range);
-  }
-  
-  // Obter pesos dos vértices
-  double* weights = GraphComputeVertexWeights(g);
-  
-  // Obter todos os vértices do grafo
-  IndicesSet* allVertices = GraphGetSetVertices(g);
-  
-  // Converter para array para facilitar o acesso por índice
-  uint16_t vertices[n];
-  uint16_t idx = 0;
-  uint16_t v = IndicesSetGetFirstElem(allVertices);
-  while (v != -1) {
-    vertices[idx++] = v;
-    v = IndicesSetGetNextElem(allVertices);
-  }
-  
-  IndicesSet* bestSet = NULL;
-  double bestWeight = DBL_MAX;
-  
-  // Busca exaustiva: testar todos os subconjuntos não vazios
-  unsigned long totalSubsets = 1UL << n;
-  
-  for (unsigned long mask = 1; mask < totalSubsets; mask++) {
-    // Criar conjunto candidato
-    IndicesSet* candidate = IndicesSetCreateEmpty(range);
-    double currentWeight = 0.0;
+  unsigned int range = GraphGetVertexRange(g);
+
+    // Obter todos os vértices reais do grafo
+    // Isto é necessário porque os índices podem não ser sequenciais (ex: 1, 5, 20)
+    IndicesSet* allVerticesSet = GraphGetSetVertices(g);
+    int numVertices = IndicesSetGetNumElems(allVerticesSet);
     
-    // Calcular peso total do conjunto
-    for (uint16_t i = 0; i < n; i++) {
-      if (mask & (1UL << i)) {
-        uint16_t vertex = vertices[i];
-        IndicesSetAdd(candidate, vertex);
-        currentWeight += weights[vertex];
-      }
+    // Se o grafo for vazio
+    if (numVertices == 0) {
+        IndicesSetDestroy(&allVerticesSet);
+        return IndicesSetCreateEmpty(range);
     }
-    
-    // Verificar se é conjunto dominante
-    if (GraphIsDominatingSet(g, candidate)) {
-      // Se for melhor que o melhor encontrado até agora
-      if (currentWeight < bestWeight) {
-        bestWeight = currentWeight;
-        if (bestSet != NULL) {
-          IndicesSetDestroy(&bestSet);
+
+    // Criar um mapa: índice 0..N-1 -> ID Real do Vértice
+    unsigned int* vertexMap = malloc(numVertices * sizeof(unsigned int));
+    if (vertexMap == NULL) abort();
+
+    int idx = 0;
+    int v = IndicesSetGetFirstElem(allVerticesSet);
+    while (v != -1) {
+        vertexMap[idx++] = v;
+        v = IndicesSetGetNextElem(allVerticesSet);
+    }
+    IndicesSetDestroy(&allVerticesSet);
+
+    // Pré-calcular os pesos dos vértices para acesso rápido
+    double* weights = GraphComputeVertexWeights(g); // Devolve array de tamanho 'range'
+
+    // Variáveis para guardar a melhor solução encontrada
+    IndicesSet* bestSet = NULL;
+    double minWeight = -1.0; // -1.0 serve como flag de "ainda não encontrei nada"
+
+    // PROCURA EXAUSTIVA (Bitmask)
+    // Gera todas as combinações possíveis de vértices (2^numVertices)
+    // De notar que o limite é 64 vértices devido ao unsigned long long.
+    // Como a complexidade é O(2^N), o tempo esgota-se muito antes de chegarmos aos 64 vértices.
+    unsigned long long maxMask = (1ULL << numVertices);
+
+    for (unsigned long long mask = 1; mask < maxMask; mask++) {
+        
+        double currentWeight = 0.0;
+        
+        // --- Otimização Preliminar de Peso ---
+        // Calcula o peso deste subconjunto ANTES de criar o IndicesSet.
+        // Se o peso já for maior que o melhor peso encontrado (minWeight),
+        // nem vale a pena perder tempo a criar o conjunto e testar dominância.
+        for (int i = 0; i < numVertices; i++) {
+            if ((mask >> i) & 1) {
+                unsigned int realID = vertexMap[i];
+                if (weights[realID] != -1.0) {
+                    currentWeight += weights[realID];
+                }
+            }
         }
-        bestSet = candidate;
-      } else {
-        IndicesSetDestroy(&candidate);
-      }
-    } else {
-      IndicesSetDestroy(&candidate);
+
+        // Se já encontrámos uma solução antes E a atual é mais pesada, ignora.
+        if (minWeight != -1.0 && currentWeight >= minWeight) {
+            continue;
+        }
+
+        // --- Construção e Verificação ---
+        // Se passou o teste do peso, construímos o conjunto candidato
+        IndicesSet* candidate = IndicesSetCreateEmpty(range);
+        for (int i = 0; i < numVertices; i++) {
+            if ((mask >> i) & 1) {
+                IndicesSetAdd(candidate, vertexMap[i]);
+            }
+        }
+
+        // Verifica se é um conjunto dominante
+        if (GraphIsDominatingSet(g, candidate)) {
+            // Se chegou aqui, já sabemos que o peso é menor (devido ao check acima)
+            // ou é a primeira solução válida encontrada.
+            if (bestSet != NULL) {
+                IndicesSetDestroy(&bestSet);
+            }
+            bestSet = candidate;
+            minWeight = currentWeight;
+        } else {
+            // Se não é dominante, liberta a memória
+            IndicesSetDestroy(&candidate);
+        }
     }
-    
-    // Otimização: se encontrou um conjunto com peso 0 (impossível com pesos positivos)
-    // ou se o peso atual já é maior que o melhor, pode pular alguns casos
-    // (implementação básica não tem poda agressiva)
-  }
-  
-  // Libertar memória
-  free(weights);
-  IndicesSetDestroy(&allVertices);
-  
-  // Fallback: se não encontrou (não deve acontecer para grafos não vazios)
-  if (bestSet == NULL) {
-    bestSet = GraphGetSetVertices(g);
-  }
-  
-  return bestSet;
+
+    // Limpeza de memória auxiliar
+    free(vertexMap);
+    free(weights);
+
+    // Se o grafo tem vértices mas não encontrámos conjunto (impossível em grafos normais),
+    // devolve todos os vértices por segurança.
+    if (bestSet == NULL) {
+        return GraphGetSetVertices(g);
+    }
+
+    return bestSet;
 }

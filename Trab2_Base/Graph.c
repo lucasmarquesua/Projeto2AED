@@ -7,10 +7,10 @@
 // Graph - Using a list of adjacency lists representation
 //
 
-// Student Name :
-// Student Number :
-// Student Name :
-// Student Number :
+// Student Name : Lucas Gaspar Marques
+// Student Number : 125982
+// Student Name : Gonçalo Carapinheira Duarte
+// Student Number : 103871
 
 /*** COMPLETE THE GraphGetSetAdjacentsTo FUNCTION */
 /*** COMPLETE THE GraphComputeVertexWeights FUNCTION ***/
